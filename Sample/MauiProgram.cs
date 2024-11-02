@@ -10,8 +10,8 @@ public static class MauiProgram
         .UseMauiApp<App>()
         .UseMauiCommunityToolkit()
         .UseShinyFramework(
-            new DryIocContainerExtension(),
-            prism => prism.OnAppStart("NavigationPage/HealthTestPage"),
+            new DryIocContainerExtension(), 
+            prism => prism.CreateWindow("NavigationPage/HealthTestPage"),
             new(ErrorAlertType.FullError)
         )
         .ConfigureFonts(fonts =>
