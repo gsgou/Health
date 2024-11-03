@@ -14,7 +14,9 @@ public enum DataType
     StepCount,
     HeartRate,
     Calories,
-    Distance
+    Distance,
+    BloodPressureDiastolic,
+    BloodPressureSystolic
 }
 
 public abstract record HealthResult(
