@@ -93,7 +93,10 @@ public class HealthService : IHealthService
             cancelToken
         );
 
-    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>> GetBloodPressures(DateTimeOffset start, DateTimeOffset end, CancellationToken cancelToken = default)
+    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>> GetBloodPressures(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        CancellationToken cancelToken = default)
     {
         var queryResults = await this.CorrelationQuery(
             start,
@@ -167,7 +170,6 @@ public class HealthService : IHealthService
         }
         return list;
     }
-
 
     public AccessState GetCurrentStatus(DataType dataType)
     {
@@ -272,23 +274,62 @@ public class HealthService : IHealthService
         return result;
     }
 
+    async Task<IList<HKSource>> SourceQuery(
+       HKSampleType sampleType,
+       CancellationToken cancellationToken = default
+    )
+    {
+        var tcs = new TaskCompletionSource<IList<HKSource>>();
+
+        var query = new HKSourceQuery(
+            sampleType,
+            null,
+            (qry, results, err) =>
+            {
+                if (err != null)
+                {
+                    tcs.TrySetException(new InvalidOperationException(err.Description));
+                }
+                else
+                {
+                    var sources = results
+                        .AsEnumerable()
+                        .Cast<HKSource>()
+                        .ToList();
+
+                    tcs.TrySetResult(sources);
+                }
+            }
+        );
+
+        using var store = new HKHealthStore();
+        using var ct = cancellationToken.Register(() =>
+        {
+            tcs.TrySetCanceled();
+            store.StopQuery(query);
+        });
+
+        store.ExecuteQuery(query);
+        var result = await tcs.Task.ConfigureAwait(false);
+        return result;
+    }
+
     async Task<IList<IList<HKQuantitySample>>> CorrelationQuery(
        DateTimeOffset start,
        DateTimeOffset end,
        HKCorrelationTypeIdentifier correlationTypeIdentifier,
-       NSPredicate? predicate = null,
-       NSDictionary? samplePredicates = null,
        CancellationToken cancellationToken = default
     )
     {
         var tcs = new TaskCompletionSource<IList<IList<HKQuantitySample>>>();
 
         var correlationType = HKCorrelationType.Create(correlationTypeIdentifier)!;
+        var predicate = HKCorrelationQuery.GetPredicateForSamples((NSDate)start.UtcDateTime, (NSDate)end.UtcDateTime, HKQueryOptions.None);
 
         var query = new HKCorrelationQuery(
             correlationType,
             predicate,
-            samplePredicates,
+            null,
             (qry, results, err) =>
             {
                 if (err != null)
@@ -299,14 +340,7 @@ public class HealthService : IHealthService
                 {
                     var list = new List<IList<HKQuantitySample>>();
 
-                    var filteredResults = results!
-                        .Where(x =>
-                        {
-                            var date = (DateTime)x.EndDate;
-                            return date >= start && date <= end;
-                        });
-
-                    foreach (HKCorrelation result in filteredResults)
+                    foreach (HKCorrelation result in results)
                     {
                         var data = result.Objects
                             .Cast<HKQuantitySample>()
@@ -336,13 +370,13 @@ public class HealthService : IHealthService
         DateTimeOffset start,
         DateTimeOffset end,
         HKCorrelationTypeIdentifier correlationTypeIdentifier,
-        NSPredicate? predicate = null,
         CancellationToken cancellationToken = default
     )
     {
         var tcs = new TaskCompletionSource<IList<IList<HKQuantitySample>>>();
 
-        var correlationType = HKCorrelationType.Create(correlationTypeIdentifier)!;
+        var correlationType = HKCorrelationType.Create(correlationTypeIdentifier)!; 
+        var predicate = HKSampleQuery.GetPredicateForSamples((NSDate)start.UtcDateTime, (NSDate)end.UtcDateTime, HKQueryOptions.None);
         var sortDescriptor = new NSSortDescriptor(key: HKSample.SortIdentifierStartDate, ascending: true);
 
         var query = new HKSampleQuery(
@@ -360,15 +394,7 @@ public class HealthService : IHealthService
                 {
                     var list = new List<IList<HKQuantitySample>>();
 
-                    var filteredResults = results!
-                        .Where(x =>
-                        {
-                            var date = (DateTime)x.EndDate;
-                            var res = date >= start && date <= end;
-                            return res;
-                        });
-
-                    foreach (HKSample result in filteredResults)
+                    foreach (HKSample result in results!)
                     {
                         var data = (result as HKCorrelation)!.Objects
                             .Cast<HKQuantitySample>()
