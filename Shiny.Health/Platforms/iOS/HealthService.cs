@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Foundation;
 using HealthKit;
 
 namespace Shiny.Health;
-
 
 public class HealthService : IHealthService
 {
@@ -93,6 +93,43 @@ public class HealthService : IHealthService
             cancelToken
         );
 
+    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>> GetBloodPressures(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        CancellationToken cancelToken = default)
+    {
+        var queryResults = await this.CorrelationQuery(
+            start,
+            end,
+            correlationTypeIdentifier: HKCorrelationTypeIdentifier.BloodPressure,
+            cancellationToken: cancelToken
+        );
+
+        var result = new List<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>();
+
+        foreach (var queryResult in queryResults)
+        {
+            var sys = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureSystolic));
+            var systolic = new NumericHealthResult(
+                    DataType.BloodPressureSystolic,
+                    sys.StartDate.ToDateTime(),
+                    sys.EndDate.ToDateTime(),
+                    sys.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
+                );
+
+            var dia = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureDiastolic));
+            var diastolic = new NumericHealthResult(
+                    DataType.BloodPressureDiastolic,
+                    sys.StartDate.ToDateTime(),
+                    sys.EndDate.ToDateTime(),
+                    sys.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
+                );
+
+            result.Add((diastolic, systolic));
+        }
+
+        return result;
+    }
 
     public async Task<IEnumerable<(DataType Type, bool Success)>> RequestPermissions(params DataType[] dataTypes)
     {
@@ -134,7 +171,6 @@ public class HealthService : IHealthService
         return list;
     }
 
-
     public AccessState GetCurrentStatus(DataType dataType)
     {
         if (!OperatingSystemShim.IsIOSVersionAtLeast(12))
@@ -162,9 +198,10 @@ public class HealthService : IHealthService
         DataType.HeartRate => HKQuantityTypeIdentifier.HeartRate,
         DataType.Calories => HKQuantityTypeIdentifier.ActiveEnergyBurned,
         DataType.Distance => HKQuantityTypeIdentifier.DistanceWalkingRunning,
+        DataType.BloodPressureDiastolic => HKQuantityTypeIdentifier.BloodPressureDiastolic,
+        DataType.BloodPressureSystolic => HKQuantityTypeIdentifier.BloodPressureSystolic,
         _ => throw new InvalidOperationException("Invalid Type")
     };
-
 
     async Task<IList<T>> Query<T>(
         HKQuantityTypeIdentifier quantityTypeIdentifier,
@@ -224,6 +261,152 @@ public class HealthService : IHealthService
                 tcs.TrySetResult(list);
             }
         };
+
+        using var store = new HKHealthStore();
+        using var ct = cancellationToken.Register(() =>
+        {
+            tcs.TrySetCanceled();
+            store.StopQuery(query);
+        });
+
+        store.ExecuteQuery(query);
+        var result = await tcs.Task.ConfigureAwait(false);
+        return result;
+    }
+
+    async Task<IList<HKSource>> SourceQuery(
+       HKSampleType sampleType,
+       CancellationToken cancellationToken = default
+    )
+    {
+        var tcs = new TaskCompletionSource<IList<HKSource>>();
+
+        var query = new HKSourceQuery(
+            sampleType,
+            null,
+            (qry, results, err) =>
+            {
+                if (err != null)
+                {
+                    tcs.TrySetException(new InvalidOperationException(err.Description));
+                }
+                else
+                {
+                    var sources = results
+                        .AsEnumerable()
+                        .Cast<HKSource>()
+                        .ToList();
+
+                    tcs.TrySetResult(sources);
+                }
+            }
+        );
+
+        using var store = new HKHealthStore();
+        using var ct = cancellationToken.Register(() =>
+        {
+            tcs.TrySetCanceled();
+            store.StopQuery(query);
+        });
+
+        store.ExecuteQuery(query);
+        var result = await tcs.Task.ConfigureAwait(false);
+        return result;
+    }
+
+    async Task<IList<IList<HKQuantitySample>>> CorrelationQuery(
+       DateTimeOffset start,
+       DateTimeOffset end,
+       HKCorrelationTypeIdentifier correlationTypeIdentifier,
+       CancellationToken cancellationToken = default
+    )
+    {
+        var tcs = new TaskCompletionSource<IList<IList<HKQuantitySample>>>();
+
+        var correlationType = HKCorrelationType.Create(correlationTypeIdentifier)!;
+        var predicate = HKCorrelationQuery.GetPredicateForSamples((NSDate)start.UtcDateTime, (NSDate)end.UtcDateTime, HKQueryOptions.None);
+
+        var query = new HKCorrelationQuery(
+            correlationType,
+            predicate,
+            null,
+            (qry, results, err) =>
+            {
+                if (err != null)
+                {
+                    tcs.TrySetException(new InvalidOperationException(err.Description));
+                }
+                else
+                {
+                    var list = new List<IList<HKQuantitySample>>();
+
+                    foreach (HKCorrelation result in results)
+                    {
+                        var data = result.Objects
+                            .Cast<HKQuantitySample>()
+                            .ToList();
+
+                        list.Add(data);
+                    }
+
+                    tcs.TrySetResult(list);
+                }
+            }
+        );
+
+        using var store = new HKHealthStore();
+        using var ct = cancellationToken.Register(() =>
+        {
+            tcs.TrySetCanceled();
+            store.StopQuery(query);
+        });
+
+        store.ExecuteQuery(query);
+        var result = await tcs.Task.ConfigureAwait(false);
+        return result;
+    }
+
+    async Task<IList<IList<HKQuantitySample>>> SampleCorrelationQuery(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        HKCorrelationTypeIdentifier correlationTypeIdentifier,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var tcs = new TaskCompletionSource<IList<IList<HKQuantitySample>>>();
+
+        var correlationType = HKCorrelationType.Create(correlationTypeIdentifier)!; 
+        var predicate = HKSampleQuery.GetPredicateForSamples((NSDate)start.UtcDateTime, (NSDate)end.UtcDateTime, HKQueryOptions.None);
+        var sortDescriptor = new NSSortDescriptor(key: HKSample.SortIdentifierStartDate, ascending: true);
+
+        var query = new HKSampleQuery(
+            correlationType,
+            predicate,
+            limit: 0,
+            new [] { sortDescriptor },
+            (qry, results, err) =>
+            {
+                if (err != null)
+                {
+                    tcs.TrySetException(new InvalidOperationException(err.Description));
+                }
+                else
+                {
+                    var list = new List<IList<HKQuantitySample>>();
+
+                    foreach (HKSample result in results!)
+                    {
+                        var data = (result as HKCorrelation)!.Objects
+                            .Cast<HKQuantitySample>()
+                            .ToList();
+
+                        list.Add(data);
+                    }
+     
+                    tcs.TrySetResult(list);
+                }
+            }
+        );
 
         using var store = new HKHealthStore();
         using var ct = cancellationToken.Register(() =>

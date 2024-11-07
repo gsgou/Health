@@ -93,6 +93,10 @@ public class HealthService : IHealthService, IAndroidLifecycle.IOnActivityResult
             }
         );
 
+    public Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>> GetBloodPressures(DateTimeOffset start, DateTimeOffset end, CancellationToken cancelToken = default)
+    {
+        return default;
+    }
 
     TaskCompletionSource<bool>? permissionRequest;
     public async Task<IEnumerable<(DataType Type, bool Success)>> RequestPermissions(params DataType[] dataTypes)
