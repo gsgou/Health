@@ -98,6 +98,13 @@ public class HealthService : IHealthService
         DateTimeOffset end,
         CancellationToken cancelToken = default)
     {
+        // 	BundleIdentifier "com.Microlife.MicrolifeHealthPlus"
+        // 	            Name "Microlife Connected Health+"	
+        var sQuery = await this.SourceQuery(
+            sampleType: HKCorrelationType.Create(HKCorrelationTypeIdentifier.BloodPressure)!,
+            cancellationToken: cancelToken
+        );
+
         var queryResults = await this.CorrelationQuery(
             start,
             end,
@@ -109,17 +116,17 @@ public class HealthService : IHealthService
 
         foreach (var queryResult in queryResults)
         {
-            var sys = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureSystolic));
-            var systolic = new NumericHealthResult(
-                    DataType.BloodPressureSystolic,
-                    sys.StartDate.ToDateTime(),
-                    sys.EndDate.ToDateTime(),
-                    sys.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
-                );
-
             var dia = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureDiastolic));
             var diastolic = new NumericHealthResult(
                     DataType.BloodPressureDiastolic,
+                    dia.StartDate.ToDateTime(),
+                    dia.EndDate.ToDateTime(),
+                    dia.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
+                );
+
+            var sys = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureSystolic));
+            var systolic = new NumericHealthResult(
+                    DataType.BloodPressureSystolic,
                     sys.StartDate.ToDateTime(),
                     sys.EndDate.ToDateTime(),
                     sys.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
