@@ -59,6 +59,12 @@ public interface IHealthService
         CancellationToken cancelToken = default
     );
 
+    Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult AverageHeartRate)>> GetBloodPressureMonitorValues(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        CancellationToken cancelToken = default
+    );
+    
     /// <summary>
     /// 
     /// </summary>

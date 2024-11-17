@@ -98,13 +98,6 @@ public class HealthService : IHealthService
         DateTimeOffset end,
         CancellationToken cancelToken = default)
     {
-        // 	BundleIdentifier "com.Microlife.MicrolifeHealthPlus"
-        // 	            Name "Microlife Connected Health+"	
-        var sQuery = await this.SourceQuery(
-            sampleType: HKCorrelationType.Create(HKCorrelationTypeIdentifier.BloodPressure)!,
-            cancellationToken: cancelToken
-        );
-
         var queryResults = await this.CorrelationQuery(
             start,
             end,
@@ -133,6 +126,47 @@ public class HealthService : IHealthService
                 );
 
             result.Add((diastolic, systolic));
+        }
+
+        return result;
+    }
+
+    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult AverageHeartRate)>> GetBloodPressureMonitorValues(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        CancellationToken cancelToken = default)
+    {
+        var result = new List<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult AverageHeartRate)>();
+
+        var bloodPressureResult = await GetBloodPressures(start, end, cancelToken);
+
+        var sourcesResult = await this.SourceQuery(
+            sampleType: HKCorrelationType.Create(HKCorrelationTypeIdentifier.BloodPressure)!,
+            cancellationToken: cancelToken
+        );
+        var sources = new NSSet(NSArray.FromObjects(sourcesResult.ToArray()));
+        var predicateFromSources = HKQuery.GetPredicateForObjectsFromSources(sources);
+
+        var averageHeartRateResult = (await this.SampleQuery(
+                HKQuantityType.Create(HKQuantityTypeIdentifier.HeartRate)!,
+                start,
+                end,
+                predicateFromSources,
+                cancellationToken: cancelToken))
+            .SelectMany(i => i)
+            .Select(x => new NumericHealthResult(
+                DataType.HeartRate,
+                x.StartDate.ToDateTime(),
+                x.EndDate.ToDateTime(),
+                x.Quantity.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute))));
+
+        foreach (var dateTime in bloodPressureResult.Select(x => x.Diastolic.End.DateTime))
+        {
+            var bpr = bloodPressureResult.Single(x => x.Diastolic.End.DateTime == dateTime);
+            var dia = bpr.Diastolic;
+            var sys = bpr.Systolic;
+            var ahr = averageHeartRateResult.Single(x => x.End.DateTime == dateTime);
+            result.Add((dia, sys, ahr));
         }
 
         return result;
@@ -373,22 +407,33 @@ public class HealthService : IHealthService
         return result;
     }
 
-    async Task<IList<IList<HKQuantitySample>>> SampleCorrelationQuery(
+    async Task<IList<IList<HKQuantitySample>>> SampleQuery(
+        HKSampleType sampleType,
         DateTimeOffset start,
         DateTimeOffset end,
-        HKCorrelationTypeIdentifier correlationTypeIdentifier,
+        NSPredicate? predicate,
         CancellationToken cancellationToken = default
     )
     {
         var tcs = new TaskCompletionSource<IList<IList<HKQuantitySample>>>();
 
-        var correlationType = HKCorrelationType.Create(correlationTypeIdentifier)!; 
-        var predicate = HKSampleQuery.GetPredicateForSamples((NSDate)start.UtcDateTime, (NSDate)end.UtcDateTime, HKQueryOptions.None);
+        var datePredicate = HKSampleQuery.GetPredicateForSamples((NSDate)start.UtcDateTime, (NSDate)end.UtcDateTime, HKQueryOptions.None);
+        NSPredicate queryPredicate;
+        if (predicate is null)
+        {
+            queryPredicate = datePredicate;
+        }
+        else
+        { 
+            var subpredicates = new NSPredicate[] { predicate, datePredicate };
+            queryPredicate = new NSCompoundPredicate(NSCompoundPredicateType.And, subpredicates);
+        }
+
         var sortDescriptor = new NSSortDescriptor(key: HKSample.SortIdentifierStartDate, ascending: true);
 
         var query = new HKSampleQuery(
-            correlationType,
-            predicate,
+            sampleType,
+            queryPredicate,
             limit: 0,
             new [] { sortDescriptor },
             (qry, results, err) =>
@@ -403,11 +448,24 @@ public class HealthService : IHealthService
 
                     foreach (HKSample result in results!)
                     {
-                        var data = (result as HKCorrelation)!.Objects
-                            .Cast<HKQuantitySample>()
-                            .ToList();
+                        List<HKQuantitySample>? data = null;
 
-                        list.Add(data);
+                        if (result is HKCorrelation correlationResult)
+                        {
+                            data = correlationResult!.Objects
+                                .Cast<HKQuantitySample>()
+                                .ToList();
+                        }
+
+                        if (result is HKQuantitySample quantityResult)
+                        {
+                            data = new List<HKQuantitySample>() { quantityResult! };
+                        }
+
+                        if (data != null)
+                        {
+                            list.Add(data);
+                        }
                     }
      
                     tcs.TrySetResult(list);
