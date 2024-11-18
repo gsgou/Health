@@ -131,7 +131,7 @@ public class HealthService : IHealthService
         return result;
     }
 
-    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult AverageHeartRate)>> GetBloodPressureMonitorValues(
+    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult? AverageHeartRate)>> GetBloodPressureMonitorValues(
         DateTimeOffset start,
         DateTimeOffset end,
         CancellationToken cancelToken = default)
@@ -160,12 +160,15 @@ public class HealthService : IHealthService
                 x.EndDate.ToDateTime(),
                 x.Quantity.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute))));
 
-        foreach (var dateTime in bloodPressureResult.Select(x => x.Diastolic.End.DateTime))
+        var dateTimes = bloodPressureResult.Select(x => x.Diastolic.End.DateTime).Distinct();
+        foreach (var dateTime in dateTimes)
         {
-            var bpr = bloodPressureResult.Single(x => x.Diastolic.End.DateTime == dateTime);
+            // Some apps or devices may save multiple times the same data.
+            var bpr = bloodPressureResult.First(x => x.Diastolic.End.DateTime == dateTime);
             var dia = bpr.Diastolic;
             var sys = bpr.Systolic;
-            var ahr = averageHeartRateResult.Single(x => x.End.DateTime == dateTime);
+            // Some apps or devices may not save the average pulse.
+            var ahr = averageHeartRateResult.FirstOrDefault(x => x.End.DateTime == dateTime);
             result.Add((dia, sys, ahr));
         }
 

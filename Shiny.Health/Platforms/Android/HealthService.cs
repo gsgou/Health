@@ -98,7 +98,7 @@ public class HealthService : IHealthService, IAndroidLifecycle.IOnActivityResult
         return default;
     }
 
-    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult AverageHeartRate)>> GetBloodPressureMonitorValues(DateTimeOffset start, DateTimeOffset end, CancellationToken cancelToken = default)
+    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult? AverageHeartRate)>> GetBloodPressureMonitorValues(DateTimeOffset start, DateTimeOffset end, CancellationToken cancelToken = default)
     {
         return default;
     }
