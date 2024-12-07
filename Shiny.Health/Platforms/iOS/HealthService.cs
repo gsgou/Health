@@ -105,7 +105,7 @@ public class HealthService : IHealthService
             cancellationToken: cancelToken
         );
 
-        var result = new List<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>();
+        var results = new List<(NumericHealthResult Diastolic, NumericHealthResult Systolic)>();
 
         foreach (var queryResult in queryResults)
         {
@@ -125,10 +125,13 @@ public class HealthService : IHealthService
                     sys.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
                 );
 
-            result.Add((diastolic, systolic));
+            results.Add((diastolic, systolic));
         }
 
-        return result;
+        // Some apps or devices may save multiple times the same data.
+        return results
+            .Distinct()
+            .ToList();
     }
 
     public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult? AverageHeartRate)>> GetBloodPressureMonitorValues(
@@ -158,17 +161,18 @@ public class HealthService : IHealthService
                 DataType.HeartRate,
                 x.StartDate.ToDateTime(),
                 x.EndDate.ToDateTime(),
-                x.Quantity.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute))));
+                x.Quantity.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute))))
+            // Some apps or devices may save multiple times the same data.
+            .Distinct();
 
-        var dateTimes = bloodPressureResult.Select(x => x.Diastolic.End.DateTime).Distinct();
+        var dateTimes = bloodPressureResult.Select(x => x.Diastolic.End.DateTime);
         foreach (var dateTime in dateTimes)
         {
-            // Some apps or devices may save multiple times the same data.
-            var bpr = bloodPressureResult.First(x => x.Diastolic.End.DateTime == dateTime);
+            var bpr = bloodPressureResult.Single(x => x.Diastolic.End.DateTime == dateTime);
             var dia = bpr.Diastolic;
             var sys = bpr.Systolic;
             // Some apps or devices may not save the average pulse.
-            var ahr = averageHeartRateResult.FirstOrDefault(x => x.End.DateTime == dateTime);
+            var ahr = averageHeartRateResult.SingleOrDefault(x => x.End.DateTime == dateTime);
             result.Add((dia, sys, ahr));
         }
 
