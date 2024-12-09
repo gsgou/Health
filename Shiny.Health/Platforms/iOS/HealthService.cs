@@ -139,7 +139,7 @@ public class HealthService : IHealthService
         DateTimeOffset end,
         CancellationToken cancelToken = default)
     {
-        var result = new List<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult AverageHeartRate)>();
+        var result = new List<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult? AverageHeartRate)>();
 
         var bloodPressureResult = await GetBloodPressures(start, end, cancelToken);
 
