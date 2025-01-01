@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -110,18 +110,20 @@ public class HealthService : IHealthService
         foreach (var queryResult in queryResults)
         {
             var dia = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureDiastolic));
+            NSTimeZone? diaTz = dia.Metadata?.TimeZone;
             var diastolic = new NumericHealthResult(
                     DataType.BloodPressureDiastolic,
-                    dia.StartDate.ToDateTime(),
-                    dia.EndDate.ToDateTime(),
+                    dia.StartDate.ToDateTimeOffset(diaTz),
+                    dia.EndDate.ToDateTimeOffset(diaTz),
                     dia.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
                 );
 
             var sys = queryResult.First(x => x.QuantityType == HKQuantityType.Create(HKQuantityTypeIdentifier.BloodPressureSystolic));
+            NSTimeZone? sysTz = sys.Metadata?.TimeZone;
             var systolic = new NumericHealthResult(
                     DataType.BloodPressureSystolic,
-                    sys.StartDate.ToDateTime(),
-                    sys.EndDate.ToDateTime(),
+                    sys.StartDate.ToDateTimeOffset(sysTz),
+                    sys.EndDate.ToDateTimeOffset(sysTz),
                     sys.Quantity.GetDoubleValue(HKUnit.MillimeterOfMercury)
                 );
 
@@ -157,11 +159,15 @@ public class HealthService : IHealthService
                 predicateFromSources,
                 cancellationToken: cancelToken))
             .SelectMany(i => i)
-            .Select(x => new NumericHealthResult(
+            .Select(x =>
+            {
+                NSTimeZone? tz = x.Metadata?.TimeZone;
+                return new NumericHealthResult(
                 DataType.HeartRate,
-                x.StartDate.ToDateTime(),
-                x.EndDate.ToDateTime(),
-                x.Quantity.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute))))
+                    x.StartDate.ToDateTimeOffset(tz),
+                    x.EndDate.ToDateTimeOffset(tz),
+                    x.Quantity.GetDoubleValue(HKUnit.Count.UnitDividedBy(HKUnit.Minute)));
+            })
             // Some apps or devices may save multiple times the same data.
             .Distinct();
 
