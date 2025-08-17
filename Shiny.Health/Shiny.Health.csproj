@@ -3,7 +3,7 @@
 
     <PropertyGroup>
         <Description>Cross Platform health data - Apple Health and Google Fit Integrations</Description>
-        <TargetFrameworks>net8.0;net8.0-ios;net8.0-android</TargetFrameworks>
+        <TargetFrameworks>net9.0;net9.0-ios;net9.0-android</TargetFrameworks>
         <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);netstandard2.1;xamarin.ios10;monoandroid13.0</TargetFrameworks>
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
