@@ -16,7 +16,7 @@ public interface IHealthService
     //    AccessState GetCurrentStatus(DataType dataType);
     
     /// <summary>
-    /// Requests read‐only HealthKit permissions for the given data types.
+    /// Requests read‐only permissions for the given data types.
     /// Returns true if the user granted *all* requested permissions.
     /// </summary>
     Task<bool> RequestReadPermissions(params DataType[] dataTypes);
