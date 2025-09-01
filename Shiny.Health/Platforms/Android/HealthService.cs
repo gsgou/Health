@@ -103,6 +103,11 @@ public class HealthService : IHealthService, IAndroidLifecycle.IOnActivityResult
         return default;
     }
 
+    public async Task<bool> RequestReadPermissions(params DataType[] dataTypes)
+    {
+        return default;
+    }
+    
     TaskCompletionSource<bool>? permissionRequest;
     public async Task<IEnumerable<(DataType Type, bool Success)>> RequestPermissions(params DataType[] dataTypes)
     {
