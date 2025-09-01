@@ -185,6 +185,24 @@ public class HealthService : IHealthService
         return result;
     }
 
+    public async Task<bool> RequestReadPermissions(params DataType[] dataTypes)
+    {
+        using var store = new HKHealthStore();
+
+        var readTypes = dataTypes
+            .Select(dt => ToNativeType(dt))
+            .Select(id => HKQuantityType.Create(id)!)
+            .Cast<HKObjectType>()
+            .ToArray();
+
+        var (granted, error) = await store.RequestAuthorizationToShareAsync(
+            new NSSet<HKSampleType>(), 
+            new NSSet<HKObjectType>(readTypes)
+        );
+        
+        return granted;
+    }
+    
     public async Task<IEnumerable<(DataType Type, bool Success)>> RequestPermissions(params DataType[] dataTypes)
     {
         //    if (!OperatingSystemShim.IsIOSVersionAtLeast(12))
