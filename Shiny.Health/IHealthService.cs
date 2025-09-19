@@ -8,18 +8,12 @@ namespace Shiny.Health;
 
 public interface IHealthService
 {
-    //    /// <summary>
-    //    /// 
-    //    /// </summary>
-    //    /// <param name="permission"></param>
-    //    /// <returns></returns>
-    //    AccessState GetCurrentStatus(DataType dataType);
-    
+    Task<AccessState> GetCurrentStatusAsync(DataType dataType);
+
     /// <summary>
     /// Requests read‐only permissions for the given data types.
-    /// Returns true if the user granted *all* requested permissions.
     /// </summary>
-    Task<bool> RequestReadPermissions(params DataType[] dataTypes);
+    Task<IEnumerable<(DataType Type, bool Success)>> RequestReadPermissionsAsync(params DataType[] dataTypes);
     
     // TODO: I really need this to come back as a batch of approve/deny since Apple Health allows this
     /// <summary>

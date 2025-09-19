@@ -98,12 +98,17 @@ public class HealthService : IHealthService, IAndroidLifecycle.IOnActivityResult
         return default;
     }
 
-    public async Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult? AverageHeartRate)>> GetBloodPressureMonitorValues(DateTimeOffset start, DateTimeOffset end, CancellationToken cancelToken = default)
+    public Task<IList<(NumericHealthResult Diastolic, NumericHealthResult Systolic, NumericHealthResult? AverageHeartRate)>> GetBloodPressureMonitorValues(DateTimeOffset start, DateTimeOffset end, CancellationToken cancelToken = default)
     {
         return default;
     }
 
-    public async Task<bool> RequestReadPermissions(params DataType[] dataTypes)
+    public Task<AccessState> GetCurrentStatusAsync(DataType dataType)
+    {
+        return default;
+    }
+    
+    public Task<IEnumerable<(DataType Type, bool Success)>> RequestReadPermissionsAsync(params DataType[] dataTypes)
     {
         return default;
     }
@@ -432,11 +437,3 @@ public class HealthService : IHealthService, IAndroidLifecycle.IOnActivityResult
 //     */
 //    //        .useDefaultAccount()
 //    //.addScope(Fitness.SCOPE_ACTIVITY_READ_WRITE)
-
-
-
-
-//public AccessState GetCurrentStatus(Permission permission)
-//{
-//    throw new NotImplementedException();
-//}

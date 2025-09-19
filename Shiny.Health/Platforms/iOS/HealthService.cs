@@ -184,23 +184,49 @@ public class HealthService : IHealthService
 
         return result;
     }
-
-    public async Task<bool> RequestReadPermissions(params DataType[] dataTypes)
+    
+    public async Task<IEnumerable<(DataType Type, bool Success)>> RequestReadPermissionsAsync(params DataType[] dataTypes)
     {
+        if (!HKHealthStore.IsHealthDataAvailable)
+            return dataTypes.Select(dt => (dt, false));
+
         using var store = new HKHealthStore();
 
+        var typesToShare = new NSSet<HKSampleType>(Array.Empty<HKSampleType>());
         var readTypes = dataTypes
-            .Select(dt => ToNativeType(dt))
-            .Select(id => HKQuantityType.Create(id)!)
+            .Select(ToNativeType)
+            .Select(HKQuantityType.Create)
+            .OfType<HKQuantityType>()
             .Cast<HKObjectType>()
             .ToArray();
+        var typesToRead = new NSSet<HKObjectType>(readTypes);
 
-        var (granted, error) = await store.RequestAuthorizationToShareAsync(
-            new NSSet<HKSampleType>(), 
-            new NSSet<HKObjectType>(readTypes)
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        store.RequestAuthorizationToShare(
+            typesToShare,
+            typesToRead,
+            (granted, error) =>
+            {
+                if (error != null)
+                    tcs.TrySetException(new NSErrorException(error));
+                else
+                    tcs.TrySetResult(granted);
+            }
         );
-        
-        return granted;
+        var allGranted = await tcs.Task;
+
+        var results = new List<(DataType, bool)>(dataTypes.Length);
+        foreach (var dt in dataTypes)
+        {
+            var status = await store.GetRequestStatusForAuthorizationToShareAsync(
+                typesToShare,
+                new NSSet<HKObjectType>(HKQuantityType.Create(ToNativeType(dt))!)
+            );
+            bool ok = status == HKAuthorizationRequestStatus.Unnecessary;
+            results.Add((dt, ok));
+        }
+
+        return results;
     }
     
     public async Task<IEnumerable<(DataType Type, bool Success)>> RequestPermissions(params DataType[] dataTypes)
@@ -237,33 +263,36 @@ public class HealthService : IHealthService
         var list = new List<(DataType, bool)>();
         foreach (var dataType in dataTypes)
         {
-            var good = GetCurrentStatus(dataType) == AccessState.Available;
+            var good = await GetCurrentStatusAsync(dataType) == AccessState.Available;
             list.Add((dataType, good));
         }
         return list;
     }
-
-    public AccessState GetCurrentStatus(DataType dataType)
+    
+    public async Task<AccessState> GetCurrentStatusAsync(DataType dataType)
     {
-        if (!OperatingSystemShim.IsIOSVersionAtLeast(12))
-            return AccessState.NotSupported;
-
         if (!HKHealthStore.IsHealthDataAvailable)
             return AccessState.NotSupported;
 
         using var store = new HKHealthStore();
-        var native = ToNativeType(dataType);
-        var type = HKQuantityType.Create(native)!;
-        var status = store.GetAuthorizationStatus(type);
+        
+        var typesToShare = new NSSet<HKSampleType>(Array.Empty<HKSampleType>());
+        var nativeType = HKQuantityType.Create(ToNativeType(dataType))!;
+        var typesToRead = new NSSet<HKObjectType>(nativeType);
+        
+        var status = await store
+            .GetRequestStatusForAuthorizationToShareAsync(typesToShare, typesToRead)
+            .ConfigureAwait(false);
 
         return status switch
         {
-            HKAuthorizationStatus.NotDetermined => AccessState.Unknown,
-            HKAuthorizationStatus.SharingDenied => AccessState.Denied,
-            HKAuthorizationStatus.SharingAuthorized => AccessState.Available
+            HKAuthorizationRequestStatus.Unnecessary => AccessState.Available,
+            HKAuthorizationRequestStatus.ShouldRequest => AccessState.Denied,
+            HKAuthorizationRequestStatus.Unknown => AccessState.Unknown,
+            _ => AccessState.Unknown
         };
     }
-
+    
     static HKQuantityTypeIdentifier ToNativeType(DataType dataType) => dataType switch
     {
         DataType.StepCount => HKQuantityTypeIdentifier.StepCount,
@@ -521,7 +550,6 @@ public class HealthService : IHealthService
     //{
     //    if (!OperatingSystemShim.IsIOSVersionAtLeast(12))
     //        return false;
-
     //    if (!HKHealthStore.IsHealthDataAvailable)
     //        return false;
 
@@ -532,7 +560,6 @@ public class HealthService : IHealthService
     //    //result == HKAuthorizationRequestStatus.ShouldRequest
     //    return result == HKAuthorizationRequestStatus.Unnecessary;
     //}
-
 
     static NSDateComponents ToNative(Interval interval)
     {
